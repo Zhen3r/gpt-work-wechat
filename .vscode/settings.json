@@ -1,0 +1,13 @@
+{
+    "python.languageServer": "Pylance",
+    "python.formatting.provider": "yapf",
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": false,
+    "github.copilot.inlineSuggest.enable": true,
+    "github.copilot.enable": {
+        "*": true,
+        "yaml": false,
+        "plaintext": false,
+        "markdown": false
+    }
+}
