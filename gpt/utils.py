@@ -12,6 +12,9 @@ env_path = os.path.join(project_path, "conf/api-keys.env")
 session_folder = os.path.join(project_path, "sessions")
 load_dotenv(env_path)
 
+openai.organization = "org-WL8jaKbBRVLeKS4Qjls4ZAhT"
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
 
 class Messages:
     """
@@ -43,29 +46,39 @@ class Messages:
     def save(self):
         # save the msg history to local
         session_path = os.path.join(session_folder, self.user_id, self.session_id + ".json")
-        with open(session_path, "w") as f:
-            json.dump(self.messages, f)
+        with open(session_path, "w", encoding="utf8") as f:
+            json.dump(self.messages, f, ensure_ascii=False)
         
 
 class ChatApp:
     """
     ChatApp class for gpt chat.
     """
-    def __init__(self, user_id, session_id):
-        openai.organization = "org-WL8jaKbBRVLeKS4Qjls4ZAhT"
-        openai.api_key = os.getenv("OPENAI_API_KEY")
+    def __init__(self, user_id, user_session):
+        session_type, session_id = user_session.get_session()
         self.msg = Messages(user_id, session_id)
+        self.session_type = session_type
+        if self.session_type:
+            # multi conversation
+            self.chat_params = {
+                "max_tokens": 512,
+            }
+        else: 
+            self.chat_params = {}
     
     def chat(self, message):
+        self.msg.messages.append({"role": "user", "content": message})
+        logger.info(("chat_params", self.chat_params))
         try:
             response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=self.msg.messages,
+                **self.chat_params
             )
         except Exception as e:
             logger.error(traceback.format_exc())
+            self.msg.messages.pop()
             return "抱歉，网络出现了一些问题，请稍后再试。"
-        self.msg.messages.append({"role": "user", "content": message})
         self.msg.messages.append({"role": "assistant", "content": response["choices"][0]["message"].content})
         self.msg.save()
         return response["choices"][0]["message"].content
@@ -74,7 +87,7 @@ class ChatApp:
 class FakeChatApp(ChatApp):
     def chat(self, message):
         self.msg.messages.append({"role": "user", "content": message})
-        response = "Hi, zhen!"
+        response = f"Hi, zhen! This is my {sum(1 for msg in self.msg.messages if msg['role']=='assistant')}th message to you."
         self.msg.messages.append({"role": "assistant", "content": response})
         self.msg.save()
         return response
@@ -120,19 +133,41 @@ class UserSession:
         # if the last session is not multi_conversion, create a new one with multi_conversion as false.
         if not self.lastest_session["multi_conversion"]:
             self.create_session(False)
-        return f"{self.lastest_session['session_id']}_{self.lastest_session['iso_time']}"
+        return (self.lastest_session["multi_conversion"],
+                f"{self.lastest_session['session_id']}_{self.lastest_session['iso_time']}")
             
 
+def chat(user, message):
+    if message == "//新建多轮对话":
+        msg = create_session(user, multi_conversion=True)
+    elif message == "//新建单轮对话":
+        msg = create_session(user, multi_conversion=False)
+    else:
+        user_session = UserSession(user)
+        chatapp = ChatApp(user, user_session)
+        msg = chatapp.chat(message)
+    return msg
+
+def fake_chat(user, message):
+    if message == "//新建多轮对话":
+        msg = create_session(user, multi_conversion=True)
+    elif message == "//新建单轮对话":
+        msg = create_session(user, multi_conversion=False)
+    else:
+        user_session = UserSession(user)
+        chatapp = FakeChatApp(user, user_session)
+        msg = chatapp.chat(message)
+    return msg
+
+def create_session(user, multi_conversion: bool):
+    user_session = UserSession(user)
+    user_session.create_session(multi_conversion)
+    return f"您好，我是GPT-3.5-turbo，您可以和我进行{'多轮' if multi_conversion else '单轮'}聊天了。"
 
 
 if __name__ == "__main__":
-    # test FakeChatApp
-    user = "fake_user4"
-    user_session = UserSession(user)
-    # user_session.create_session(True)
-    session = user_session.get_session()
-    fake_chat = FakeChatApp(user, session)
-    print(fake_chat.chat("hello"))
+    print(create_session("zhen", multi_conversion=False))
+    print(fake_chat("zhen", "如何使用企业微信bot进行回复？请举出python的例子。"))
 
     
     

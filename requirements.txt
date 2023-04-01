@@ -6,3 +6,8 @@ urllib3==1.26.15
 openai
 python-dotenv
 pysocks
+fastapi
+uvicorn
+pycryptodome
+lxml
+loguru
